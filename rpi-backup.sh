@@ -36,7 +36,7 @@ elapse(){
 starttime=`date +'%Y-%m-%d %H:%M:%S'`
 log "****************Start backup img at $starttime******************"
 
-usbmount=/home/pi/nas-data
+usbmount=/home/pi/nas-data/backup
 
 usbmountsz=`df -P $usbmount | grep /dev | awk '{print $4}'`
 if [ $usbmountsz -lt 16809984 ]; then

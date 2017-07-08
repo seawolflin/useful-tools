@@ -20,38 +20,57 @@
 # 	exit 0
 # fi
 
+log(){
+    echo ">>> LOG <<< $1"
+}
+
+elapse(){
+    start_seconds=$(date --date="$1" +%s)
+    endtime=`date +'%Y-%m-%d %H:%M:%S'`
+    end_seconds=$(date --date="$endtime" +%s);
+    echo $end_seconds
+    echo $((end_seconds-start_seconds))
+    return $((end_seconds-start_seconds))
+}
+
+starttime=`date +'%Y-%m-%d %H:%M:%S'`
+log "****************Start backup img at $starttime******************"
+
 usbmount=/home/pi/nas-data
 
 usbmountsz=`df -P $usbmount | grep /dev | awk '{print $4}'`
 if [ $usbmountsz -lt 16809984 ]; then
-	echo "df -P $usbmount"
+	log "df -P $usbmount"
 	df -P $usbmount
-	echo "$usbmount not enough space!!! exit now"
+	log "$usbmount not enough space!!! exit now"
 	exit 0
 fi
 
 # img=$usbmount/iNovaBear-`date +%Y%m%d-%H%M`.img
-img=$usbmount/rpi.img
+img=$usbmount/rpi-gosht.img
 
 #install tools
 #sudo apt-get -y install dosfstools dump parted kpartx
 # sudo apt-get -y install rsync dosfstools parted kpartx
 
 
-echo ===================== part 1, create a new blank img ===============================
+log "===================== part 1, create a new blank img ====================="
 # New img file
 # Remove old file
 rm -f $img
 bootsz=`df -P | grep /boot | awk '{print $2}'`
 rootsz=`df -P | grep /dev/root | awk '{print $3}'`
 totalsz=`echo $bootsz $rootsz | awk '{print int(($1+$2)*1.3/1024)}'`
+log "Create img size ${totalsz}M"
 sudo dd if=/dev/zero of=$img bs=1M count=$totalsz
+log "Create img done."
 
 # format virtual disk
+log "Format virtual disk"
 bootstart=`sudo fdisk -l /dev/mmcblk0 | grep mmcblk0p1 | awk '{print $2}'`
 bootend=`sudo fdisk -l /dev/mmcblk0 | grep mmcblk0p1 | awk '{print $3}'`
 rootstart=`sudo fdisk -l /dev/mmcblk0 | grep mmcblk0p2 | awk '{print $2}'`
-echo "boot: $bootstart >>> $bootend, root: $rootstart >>> end"
+log "boot: $bootstart >>> $bootend, root: $rootstart >>> end"
 #rootend=`sudo fdisk -l /dev/mmcblk0 | grep mmcblk0p2 | awk '{print $3}'`
 sudo parted $img --script -- mklabel msdos
 sudo parted $img --script -- mkpart primary fat32 ${bootstart}s ${bootend}s
@@ -61,20 +80,26 @@ device=/dev/mapper/`sudo kpartx -va $loopdevice | sed -E 's/.*(loop[0-9])p.*/\1/
 sleep 5
 sudo mkfs.vfat ${device}p1 -n boot
 sudo mkfs.ext4 ${device}p2
+elapse $starttime
+log "===================== part 1, create a new blank img done elapse($?s) ====================="
 
-
-echo ===================== part 2, fill the data to img =========================
+log "===================== part 2, fill the data to img ====================="
 # mount partitions
-mountb=$usbmount/backup_boot/
-mountr=$usbmount/backup_root/
+mountb=$usbmount/backup_boot
+mountr=$usbmount/backup_root
 mkdir -p $mountb $mountr
 # backup /boot
+log "mount ${device}p1 to $mountb"
 sudo mount -t vfat ${device}p1 $mountb
+log "copy /boot/* to $mountb"
 sudo cp -rfp /boot/* $mountb
 sync
+sync
+log "umount $mountb"
 sudo umount $mountb
-echo "...Boot partition done"
+log "...Boot partition done"
 # backup /root
+log "mount ${device}p2 to $mountr"
 sudo mount -t ext4 ${device}p2 $mountr
 if [ -f /etc/dphys-swapfile ]; then
         SWAPFILE=`cat /etc/dphys-swapfile | grep ^CONF_SWAPFILE | cut -f 2 -d=`
@@ -87,14 +112,15 @@ sudo rsync --force -rltWDEgopt --delete --stats --progress\
 	$EXCLUDE_SWAPFILE \
 	--exclude '.gvfs' \
 	--exclude '/dev' \
-        --exclude '/media' \
+    --exclude '/media' \
 	--exclude '/mnt' \
 	--exclude '/proc' \
-        --exclude '/run' \
+    --exclude '/run' \
 	--exclude '/sys' \
 	--exclude '/tmp' \
-        --exclude 'lost\+found' \
+    --exclude 'lost\+found' \
 	--exclude '$usbmount' \
+    --exclude '/home/pi/nas-data' \
 	// $mountr
 # special dirs
 for i in dev media mnt proc run sys boot; do
@@ -109,9 +135,13 @@ fi
 sudo rm -f $mountr/etc/udev/rules.d/70-persistent-net.rules
 
 sync
+sync
 ls -lia $mountr/home/pi/
+log "umount $mountr"
 sudo umount $mountr
-echo "...Root partition done"
+log "...Root partition done"
+elapse $starttime
+log "===================== part 2, fill the data to img elapse($?s) ====================="
 # if using the dump/restore
 # tmp=$usbmount/root.ext4
 # sudo chattr +d $img $mountb $mountr $tmp
@@ -123,7 +153,8 @@ echo "...Root partition done"
 # umount loop device
 sudo kpartx -d $loopdevice
 sudo losetup -d $loopdevice
-sudo umount $usbmount
+# sudo umount $usbmount
 rm -rf $mountb $mountr
-echo "==== All done. You can un-plug the backup device"
+elapse $starttime
+log "==== All done. You can un-plug the backup device elapse($?s)"
 

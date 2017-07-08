@@ -25,18 +25,16 @@ log(){
 }
 
 elapse(){
-    start_seconds=$(date --date="$1" +%s)
+    start_seconds=$(date --date="$1 $2" +%s)
     endtime=`date +'%Y-%m-%d %H:%M:%S'`
     end_seconds=$(date --date="$endtime" +%s);
-    echo $end_seconds
-    echo $((end_seconds-start_seconds))
     return $((end_seconds-start_seconds))
 }
 
 starttime=`date +'%Y-%m-%d %H:%M:%S'`
 log "****************Start backup img at $starttime******************"
 
-usbmount=/home/pi/nas-data/backup
+usbmount=/home/pi/nas-data/backup-rpi
 
 usbmountsz=`df -P $usbmount | grep /dev | awk '{print $4}'`
 if [ $usbmountsz -lt 16809984 ]; then
